@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Hortai",
+    name: "Pixomancy",
     platforms: [.macOS(.v26)],
     targets: [
         .executableTarget(
-            name: "Hortai",
+            name: "Pixomancy",
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

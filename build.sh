@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Builds build/Hortai.app from the Swift package.
+# Builds build/Pixomancy.app from the Swift package.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 swift build -c release
 
-APP=build/Hortai.app
+APP=build/Pixomancy.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/Hortai "$APP/Contents/MacOS/Hortai"
+cp .build/release/Pixomancy "$APP/Contents/MacOS/Pixomancy"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Layered icon (light, dark, tinted, clear); actool needs absolute paths.
 xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$PWD/$APP/Contents/Resources" --platform macosx \
@@ -27,10 +27,10 @@ touch "$APP"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PWD/$APP"
 # Release only: notarise, staple the ticket so the app opens offline too, and zip it.
 if [[ -n "${APPLE_ID:-}" ]]; then
-  ditto -c -k --keepParent "$APP" build/Hortai.zip
-  xcrun notarytool submit build/Hortai.zip --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+  ditto -c -k --keepParent "$APP" build/Pixomancy.zip
+  xcrun notarytool submit build/Pixomancy.zip --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
   xcrun stapler staple "$APP"
-  rm build/Hortai.zip
-  ditto -c -k --keepParent "$APP" build/Hortai.zip
+  rm build/Pixomancy.zip
+  ditto -c -k --keepParent "$APP" build/Pixomancy.zip
 fi
 echo "$PWD/$APP"

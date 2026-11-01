@@ -73,15 +73,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.model.restore(folders: folders, photo: photo)
     }
 
-    // The standard panel, with who made Hortai and where it lives; the credit stays in English in every language.
+    // The standard panel, with who made Pixomancy and where it lives; the credit stays in English in every language.
     @objc func showAbout(_ sender: Any?) {
         let credits = NSMutableAttributedString(string: "Made by Iuliia Ivashko\n", attributes: [
             .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
             .foregroundColor: NSColor.labelColor,
         ])
-        credits.append(NSAttributedString(string: "github.com/yulia-ivashko/hortai", attributes: [
+        credits.append(NSAttributedString(string: "github.com/yulia-ivashko/pixomancy", attributes: [
             .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-            .link: URL(string: "https://github.com/yulia-ivashko/hortai")!,
+            .link: URL(string: "https://github.com/yulia-ivashko/pixomancy")!,
         ]))
         let centred = NSMutableParagraphStyle()
         centred.alignment = .center

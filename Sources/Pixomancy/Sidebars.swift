@@ -250,7 +250,7 @@ struct TitleView: View {
             title(folder.lastPathComponent, path: folder.deletingLastPathComponent())
                 .help(folder.path)
         } else {
-            Text("Hortai").font(.headline).padding(.leading, ImageScrollView.sideMargin)
+            Text("Pixomancy").font(.headline).padding(.leading, ImageScrollView.sideMargin)
         }
     }
 

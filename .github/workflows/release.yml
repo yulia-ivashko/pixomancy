@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   release:
-    # Hortai needs the macOS 26 SDK and Xcode 26's actool for its layered icon.
+    # Pixomancy needs the macOS 26 SDK and Xcode 26's actool for its layered icon.
     runs-on: macos-26
     env:
       SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' }}
@@ -59,12 +59,12 @@ jobs:
         run: |
           if [ "$SIGNED" = true ]; then
             ./build.sh
-            spctl --assess --type execute --verbose=2 build/Hortai.app
-            mv build/Hortai.zip "build/Hortai-$VERSION.zip"
+            spctl --assess --type execute --verbose=2 build/Pixomancy.app
+            mv build/Pixomancy.zip "build/Pixomancy-$VERSION.zip"
           else
             echo "No signing secrets: building an unsigned (ad hoc) release."
             SIGNING_IDENTITY= APPLE_ID= ./build.sh
-            ditto -c -k --keepParent build/Hortai.app "build/Hortai-$VERSION.zip"
+            ditto -c -k --keepParent build/Pixomancy.app "build/Pixomancy-$VERSION.zip"
           fi
 
       - name: Publish the release
@@ -75,11 +75,11 @@ jobs:
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           NOTES="$(git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' | sed '/^-----BEGIN/,$d')"
           [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ] || NOTES=""
-          [ -n "$NOTES" ] || NOTES="Hortai $VERSION."
+          [ -n "$NOTES" ] || NOTES="Pixomancy $VERSION."
           if [ "$SIGNED" != true ]; then
-            NOTES="$(printf '%s\n\n%s' "$NOTES" "This build is not notarised. After the first launch macOS says it can't verify Hortai: open System Settings → Privacy & Security and click Open Anyway.")"
+            NOTES="$(printf '%s\n\n%s' "$NOTES" "This build is not notarised. After the first launch macOS says it can't verify Pixomancy: open System Settings → Privacy & Security and click Open Anyway.")"
           fi
-          gh release create "$GITHUB_REF_NAME" "build/Hortai-$VERSION.zip" --title "Hortai $VERSION" --notes "$NOTES"
+          gh release create "$GITHUB_REF_NAME" "build/Pixomancy-$VERSION.zip" --title "Pixomancy $VERSION" --notes "$NOTES"
 
       - name: Remove the signing keychain
         if: ${{ always() && env.SIGNED == 'true' }}

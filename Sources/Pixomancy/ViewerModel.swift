@@ -235,7 +235,7 @@ final class ViewerModel: ObservableObject {
         loadTask?.cancel()
         currentURL = nil
         image = nil
-        window?.title = "Hortai"
+        window?.title = "Pixomancy"
         window?.representedURL = nil
         saveSession()
     }

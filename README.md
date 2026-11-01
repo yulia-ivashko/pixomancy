@@ -1,15 +1,15 @@
 <p align="center"><img src="docs/icon.png" width="128" alt=""></p>
-<h1 align="center">Hortai</h1>
+<h1 align="center">Pixomancy</h1>
 <p align="center">A fast photo viewer for macOS.</p>
 <p align="center">
-  <a href="https://github.com/yulia-ivashko/hortai/releases/latest"><img src="https://img.shields.io/github/v/release/yulia-ivashko/hortai?label=release&color=e8335a" alt="Latest release"></a>
-  <a href="https://github.com/yulia-ivashko/hortai/releases"><img src="https://img.shields.io/github/downloads/yulia-ivashko/hortai/total?color=e8335a" alt="Downloads"></a>
+  <a href="https://github.com/yulia-ivashko/pixomancy/releases/latest"><img src="https://img.shields.io/github/v/release/yulia-ivashko/pixomancy?label=release&color=e8335a" alt="Latest release"></a>
+  <a href="https://github.com/yulia-ivashko/pixomancy/releases"><img src="https://img.shields.io/github/downloads/yulia-ivashko/pixomancy/total?color=e8335a" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-e8335a" alt="macOS 26 or later">
 </p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img src="docs/screenshot-light.png" alt="The Hortai window: the folder's thumbnails on the left, a photo of clouds seen from orbit in the middle, its metadata on the right">
+  <img src="docs/screenshot-light.png" alt="The Pixomancy window: the folder's thumbnails on the left, a photo of clouds seen from orbit in the middle, its metadata on the right">
 </picture>
 
 Open one photo and flip through every photo in its folder with the arrow keys, see everything the file knows about it, and rename, tag, move or clean it up without leaving the window.
@@ -52,7 +52,7 @@ Native Swift (AppKit + SwiftUI), Apple silicon, macOS 26 or later.
 
 ## Install
 
-Download `Hortai-<version>.zip` from [Releases](https://github.com/yulia-ivashko/hortai/releases/latest), unzip it and move Hortai to Applications. The current builds are not notarised yet: the first time you open Hortai, macOS says it can't verify it. Open System Settings → Privacy & Security, click Open Anyway, and from then on it opens as usual.
+Download `Pixomancy-<version>.zip` from [Releases](https://github.com/yulia-ivashko/pixomancy/releases/latest), unzip it and move Pixomancy to Applications. The current builds are not notarised yet: the first time you open Pixomancy, macOS says it can't verify it. Open System Settings → Privacy & Security, click Open Anyway, and from then on it opens as usual.
 
 ## Build
 
@@ -60,4 +60,4 @@ Download `Hortai-<version>.zip` from [Releases](https://github.com/yulia-ivashko
 ./build.sh
 ```
 
-The app lands in `build/Hortai.app`. To open photos with it by default: Finder → right-click a photo → Get Info → Open with → Hortai → Change All.
+The app lands in `build/Pixomancy.app`. To open photos with it by default: Finder → right-click a photo → Get Info → Open with → Pixomancy → Change All.

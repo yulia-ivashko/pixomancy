@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Hortai</string>
+	<string>Pixomancy</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hortai</string>
+	<string>Pixomancy</string>
 	<key>CFBundleExecutable</key>
-	<string>Hortai</string>
+	<string>Pixomancy</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.github.yulia-ivashko.hortai</string>
+	<string>com.github.yulia-ivashko.pixomancy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

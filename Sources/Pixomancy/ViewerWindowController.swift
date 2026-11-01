@@ -17,7 +17,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
             defer: false
         )
         window.titlebarAppearsTransparent = true
-        window.title = "Hortai"
+        window.title = "Pixomancy"
         window.minSize = NSSize(width: 520, height: 380)
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
@@ -35,7 +35,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
         split.view.autoresizingMask = [.width, .height]
         backdrop.addSubview(split.view)
         window.contentViewController = container
-        let toolbar = NSToolbar(identifier: "HortaiViewer")
+        let toolbar = NSToolbar(identifier: "PixomancyViewer")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         // No "Icon and Text" menu on right-click: it relabels the buttons and changes nothing useful.
@@ -45,8 +45,8 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
         window.toolbarStyle = .unified
         model.window = window
         model.sidePanelsWidth = { [weak self] in self?.split.openPanelsWidth ?? 0 }
-        if !window.setFrameUsingName("HortaiViewer") { window.center() }
-        window.setFrameAutosaveName("HortaiViewer")
+        if !window.setFrameUsingName("PixomancyViewer") { window.center() }
+        window.setFrameAutosaveName("PixomancyViewer")
         if let url { model.open(url) }
     }
 
@@ -120,7 +120,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
     @objc func copy(_ sender: Any?) { model.copyToPasteboard() }
     @objc func printPhoto(_ sender: Any?) { model.printPhoto() }
     @objc func setAsWallpaper(_ sender: Any?) { model.setAsWallpaper() }
-    // For what Hortai leaves to Preview: signing, marking up, small edits.
+    // For what Pixomancy leaves to Preview: signing, marking up, small edits.
     @objc func openInPreview(_ sender: Any?) {
         if let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") { model.open(with: preview) }
     }
