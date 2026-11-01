@@ -1,6 +1,18 @@
-# Hortai
+<p align="center"><img src="docs/icon.png" width="128" alt=""></p>
+<h1 align="center">Hortai</h1>
+<p align="center">A fast photo viewer for macOS.</p>
+<p align="center">
+  <a href="https://github.com/yulia-ivashko/hortai/releases/latest"><img src="https://img.shields.io/github/v/release/yulia-ivashko/hortai?label=release&color=e8335a" alt="Latest release"></a>
+  <a href="https://github.com/yulia-ivashko/hortai/releases"><img src="https://img.shields.io/github/downloads/yulia-ivashko/hortai/total?color=e8335a" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-26%2B-e8335a" alt="macOS 26 or later">
+</p>
 
-A fast photo viewer for macOS. Open one photo and flip through every photo in its folder with the arrow keys, see everything the file knows about it, and rename, tag, move or clean it up without leaving the window.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot-light.png" alt="The Hortai window: the folder's thumbnails on the left, a photo of clouds seen from orbit in the middle, its metadata on the right">
+</picture>
+
+Open one photo and flip through every photo in its folder with the arrow keys, see everything the file knows about it, and rename, tag, move or clean it up without leaving the window.
 
 ## Browsing
 
