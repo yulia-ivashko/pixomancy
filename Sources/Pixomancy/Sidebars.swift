@@ -117,6 +117,18 @@ struct ThumbnailList: View {
     @ObservedObject var model: ViewerModel
     @AppStorage(ThumbnailStyle.key) private var style: ThumbnailStyle = .imagesAndNames
     @State private var collapsed: Set<URL> = []
+    // Stepping past either end: a second copy of the list stands next to the first while the panel rolls on into it.
+    @State private var extraCopy: ListCopy?
+    @State private var overflows = false
+    @State private var selectedCell = CGRect.zero
+    @State private var panelHeight: CGFloat = 0
+    @State private var wrapID = 0
+
+    private enum ListCopy: Hashable { case main, above, below }
+    private struct CellID: Hashable {
+        let url: URL
+        let copy: ListCopy
+    }
 
     var body: some View {
         // The + sits under the list, not over it; the list fades out just above it.
@@ -124,32 +136,19 @@ struct ThumbnailList: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: style == .names ? 0 : 6) {
-                        ForEach(model.groups) { group in
-                            FolderHeader(folder: group.folder, isCollapsed: collapsed.contains(group.folder)) {
-                                withAnimation(.snappy) {
-                                    if collapsed.contains(group.folder) { collapsed.remove(group.folder) } else { collapsed.insert(group.folder) }
-                                }
-                            } remove: {
-                                model.remove(group.folder)
-                            }
-                            if !collapsed.contains(group.folder) {
-                                if group.files.isEmpty {
-                                    Text("No Photos")
-                                        .font(.callout)
-                                        .foregroundStyle(.tertiary)
-                                        .padding(.horizontal, 28)
-                                        .padding(.vertical, 6)
-                                }
-                                ForEach(group.files, id: \.self) { url in
-                                    cell(url)
-                                }
-                            }
-                        }
+                        if extraCopy == .above { rows(.above) }
+                        rows(.main)
+                        if extraCopy == .below { rows(.below) }
                     }
                     .padding(.leading, style == .names ? 8 : 14)
                     .padding(.trailing, style == .names ? 12 : 18)
                     .padding(.vertical, style == .names ? 8 : 10)
                 }
+                .coordinateSpace(.named(Self.panelSpace))
+                .onScrollGeometryChange(for: Bool.self) { $0.contentSize.height > $0.containerSize.height } action: { _, fits in
+                    if extraCopy == nil { overflows = fits }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
                 // A folder dropped here joins the ones already open.
                 .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                     for provider in providers {
@@ -166,13 +165,20 @@ struct ThumbnailList: View {
                     } label: { EmptyView() }
                     .pickerStyle(.inline)
                 }
-                .onChange(of: model.currentURL, initial: true) { _, url in
+                .onChange(of: model.currentURL, initial: true) { old, url in
                     guard let url else { return }
                     // Arrows can walk into a folded group; open it so the shown photo is visible.
                     if let group = model.groups.first(where: { $0.files.contains(url) }), collapsed.contains(group.folder) {
                         collapsed.remove(group.folder)
                     }
-                    withAnimation { proxy.scrollTo(url, anchor: .center) }
+                    let wrap = model.takeStepWrap()
+                    wrapID += 1
+                    extraCopy = nil
+                    if wrap != 0, overflows, let old {
+                        roll(from: old, to: url, forward: wrap > 0, proxy)
+                    } else {
+                        withAnimation { proxy.scrollTo(CellID(url: url, copy: .main), anchor: .center) }
+                    }
                 }
             }
             .mask {
@@ -199,8 +205,69 @@ struct ThumbnailList: View {
         .frame(minWidth: 200)
     }
 
+    private static let panelSpace = "thumbnailPanel"
+    private static let rollTime = 0.35
+
+    private func rows(_ copy: ListCopy) -> some View {
+        ForEach(model.groups) { group in
+            FolderHeader(folder: group.folder, isCollapsed: collapsed.contains(group.folder)) {
+                withAnimation(.snappy) {
+                    if collapsed.contains(group.folder) { collapsed.remove(group.folder) } else { collapsed.insert(group.folder) }
+                }
+            } remove: {
+                model.remove(group.folder)
+            }
+            if !collapsed.contains(group.folder) {
+                if group.files.isEmpty {
+                    Text("No Photos")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 6)
+                }
+                ForEach(group.files, id: \.self) { url in
+                    cell(url, copy: copy)
+                }
+            }
+        }
+    }
+
+    // The last photo is followed by the first, without a jump back across the list: the panel rolls on into a copy,
+    // and once it stops the copy goes and the same photo stands in the same place in the real list.
+    private func roll(from old: URL, to url: URL, forward: Bool, _ proxy: ScrollViewProxy) {
+        let id = wrapID
+        let copy: ListCopy = forward ? .below : .above
+        let anchor: UnitPoint = forward ? .top : .bottom
+        // A copy added above pushes everything down; pin the shown photo where it was first, unanimated.
+        let spare = panelHeight - selectedCell.height
+        let pin = UnitPoint(x: 0.5, y: spare > 0 ? selectedCell.minY / spare : 0)
+        extraCopy = copy
+        DispatchQueue.main.async {
+            guard id == wrapID else { return }
+            if !forward { proxy.scrollTo(CellID(url: old, copy: .main), anchor: pin) }
+            // The lazy list needs a moment to lay the new copy out, or the animation below has nowhere to go.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                guard id == wrapID else { return }
+                withAnimation(.easeInOut(duration: Self.rollTime)) {
+                    proxy.scrollTo(CellID(url: url, copy: copy), anchor: anchor)
+                }
+                // By the clock: a scroll's animation reports itself finished at once.
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.rollTime + 0.05) {
+                    guard id == wrapID else { return }
+                    // Below: back to the real row while the copy still holds the list long, so nothing clamps.
+                    // Above: the copy has the real list's offsets, so it can simply go.
+                    if forward { proxy.scrollTo(CellID(url: url, copy: .main), anchor: anchor) }
+                    DispatchQueue.main.async {
+                        guard id == wrapID else { return }
+                        extraCopy = nil
+                    }
+                }
+            }
+        }
+    }
+
     // Drawn by hand: the system list's selection is inset and came out narrower than the panel.
-    private func cell(_ url: URL) -> some View {
+    private func cell(_ url: URL, copy: ListCopy) -> some View {
         let selected = url == model.currentURL
         let name = Text(url.lastPathComponent)
             .foregroundStyle(selected ? .primary : .secondary)
@@ -232,7 +299,37 @@ struct ThumbnailList: View {
         .contentShape(Rectangle())
         .onTapGesture { model.select(url) }
         .help(url.lastPathComponent)
-        .id(url)
+        .overlay {
+            SecondaryClickMenu { [weak model] in
+                guard let model, let controller = model.window?.windowController as? ViewerWindowController else { return nil }
+                model.select(url)
+                return controller.thumbnailMenu()
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.panelSpace)) } action: { frame in
+            if selected, copy == .main { selectedCell = frame }
+        }
+        .id(CellID(url: url, copy: copy))
+    }
+}
+
+// Catches only a right-click or a Control-click, and leaves every other click and the tooltip to the view under it.
+private struct SecondaryClickMenu: NSViewRepresentable {
+    let menu: () -> NSMenu?
+
+    func makeNSView(context: Context) -> Catcher { Catcher() }
+    func updateNSView(_ view: Catcher, context: Context) { view.makeMenu = menu }
+
+    final class Catcher: NSView {
+        var makeMenu: (() -> NSMenu?)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            let secondary = event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+            return secondary ? super.hitTest(point) : nil
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? { makeMenu?() }
     }
 }
 

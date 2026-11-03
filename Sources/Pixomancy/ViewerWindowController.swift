@@ -172,6 +172,19 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
         return menu
     }
 
+    // The photo's own menu, and under it the panel's look, which used to be all a right-click here gave.
+    func thumbnailMenu() -> NSMenu? {
+        guard let menu = contextMenu() else { return nil }
+        menu.addItem(.separator())
+        for (index, style) in ThumbnailStyle.allCases.enumerated() {
+            let item = NSMenuItem(title: style.title, action: #selector(setThumbnailStyle(_:)), keyEquivalent: "")
+            item.tag = index
+            item.target = self
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     // MARK: Side panels
 
     @objc func setThumbnailStyle(_ sender: NSMenuItem) {

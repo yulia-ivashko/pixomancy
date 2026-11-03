@@ -197,6 +197,14 @@ final class ViewerModel: ObservableObject {
         show(photo.flatMap { p in files.first { $0.path == p.path } } ?? first)
     }
 
+    // The last step went past an end of the list: the thumbnail panel reads this once to roll on instead of jumping back.
+    private var stepWrap = 0
+
+    func takeStepWrap() -> Int {
+        defer { stepWrap = 0 }
+        return stepWrap
+    }
+
     func step(_ delta: Int) {
         guard let current = currentURL else { return }
         rescan()
@@ -205,6 +213,7 @@ final class ViewerModel: ObservableObject {
         let target: Int
         if let index = indexOf(current) {
             target = ((index + delta) % count + count) % count
+            stepWrap = count > 1 && abs(target - index) > 1 ? delta : 0
         } else {
             // The current file is gone; continue from where it used to be.
             let next = min(lastIndex, count)
