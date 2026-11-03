@@ -1,4 +1,9 @@
-<p align="center"><img src="docs/icon.png" width="128" alt=""></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png">
+    <img src="docs/icon.png" width="128" alt="">
+  </picture>
+</p>
 <h1 align="center">Pixomancy</h1>
 <p align="center">A fast photo viewer for macOS.</p>
 <p align="center">
@@ -16,11 +21,21 @@ Open one photo and flip through every photo in its folder with the arrow keys, s
 
 ## Browsing
 
-- ← → step through the folder, in Finder's order, wrapping at the ends
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/flip-dark.gif">
+  <img src="docs/flip-light.gif" alt="Stepping through a folder with the arrow keys: after the last photo the sidebar rolls straight on to the first">
+</picture>
+
+- ← → step through the folder, in Finder's order; past the last photo the sidebar rolls on to the first, in a circle
 - Open a folder, or add more folders (⇧⌘O) and step through all of them in turn
-- Sidebar with the folders' photos: thumbnails, thumbnails and names, or a list
+- Sidebar with the folders' photos: thumbnails, thumbnails and names, or a list; right-click a photo there for the same menu as on the big one
 - Click any folder in the path under the photo's name to open it; back and forward take you where you were, like in Finder
 - New, deleted and edited files show up by themselves, also when another app saves over the photo you're looking at
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/folders-dark.gif">
+  <img src="docs/folders-light.gif" alt="A second folder joins the sidebar, and the arrow keys carry on from one folder into the other">
+</picture>
 
 ## Viewing
 
@@ -30,12 +45,22 @@ Open one photo and flip through every photo in its folder with the arrow keys, s
 
 ## Changing the file
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/rename-dark.gif">
+  <img src="docs/rename-light.gif" alt="The popover under the photo's name: typing a new name renames the file">
+</picture>
+
 - Click the photo's name in the title to rename it, add Finder tags or move it to another folder, as in Preview
 - Rotate left and right, saved to the file (JPEG and HEIC without re-compression)
 - Move to Trash, print, copy, copy path (⌥), set as wallpaper
 - Open in Preview, for signing, markup and small edits
 
 ## Metadata
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/metadata-dark.gif">
+  <img src="docs/metadata-light.gif" alt="The Metadata sidebar opens beside the photo and follows it from photo to photo">
+</picture>
 
 - Metadata sidebar (⌘I), laid out like Finder's Get Info, with sections you can fold:
   - **Description**: title, caption, keywords, author, credit, copyright, rating and colour label
