@@ -22,6 +22,7 @@ final class ViewerModel: ObservableObject {
     @Published var infoPanelOpen = false
     // Width taken by open side panels, so a new photo shapes only the part of the window it is shown in.
     var sidePanelsWidth: () -> CGFloat = { 0 }
+    var narrowestWindow: () -> CGFloat = { 0 }
     // Bumped when a photo changes on disk, so thumbnails redraw.
     @Published private(set) var revision = 0
     private var cache: [URL: CGImage] = [:]
@@ -307,7 +308,7 @@ final class ViewerModel: ObservableObject {
         let room = wholeScreen ? visible.width : window.frame.width
         // A new photo is never blown up past its real size; the screen fit may enlarge it.
         let fit = min(wholeScreen ? .infinity : 1, (room - sides) / photo.width, (visible.height - chrome) / photo.height)
-        var width = max(photo.width * fit + sides, window.minSize.width)
+        var width = max(photo.width * fit + sides, window.minSize.width, narrowestWindow())
         var height = max(photo.height * fit + chrome, window.minSize.height)
         if wholeScreen {
             // Only ever grows: a window already as big as the screen keeps its size, and the photo fills it.

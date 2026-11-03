@@ -45,6 +45,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate, NSMenu
         window.toolbarStyle = .unified
         model.window = window
         model.sidePanelsWidth = { [weak self] in self?.split.openPanelsWidth ?? 0 }
+        model.narrowestWindow = { [weak self] in self?.split.narrowestWindow ?? 0 }
         if !window.setFrameUsingName("PixomancyViewer") { window.center() }
         window.setFrameAutosaveName("PixomancyViewer")
         if let url { model.open(url) }

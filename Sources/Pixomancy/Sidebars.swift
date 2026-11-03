@@ -346,6 +346,7 @@ final class ViewerSplitController: NSSplitViewController {
     private let model: ViewerModel
     private var watch: AnyCancellable?
     private static let thumbnailsKey = "ShowsThumbnails", infoKey = "ShowsInfo"
+    private static let viewerMinimum: CGFloat = 360
 
     init(model: ViewerModel, info infoModel: InfoModel) {
         self.model = model
@@ -364,7 +365,7 @@ final class ViewerSplitController: NSSplitViewController {
         info.maximumThickness = max(420, (NSScreen.main?.visibleFrame.width ?? 1440) / 3)
         super.init(nibName: nil, bundle: nil)
         let viewer = NSSplitViewItem(viewController: Self.host(ViewerView(model: model, zoom: model.zoom)))
-        viewer.minimumThickness = 360
+        viewer.minimumThickness = Self.viewerMinimum
         // The floating sidebar sits over the viewer's background, not beside it; the photo stays clear of it.
         viewer.automaticallyAdjustsSafeAreaInsets = true
         splitViewItems = [thumbnails, viewer, info]
@@ -413,6 +414,13 @@ final class ViewerSplitController: NSSplitViewController {
 
     var openPanelsWidth: CGFloat {
         [thumbnails, info].filter { !$0.isCollapsed }.reduce(0) { $0 + $1.viewController.view.frame.width }
+    }
+
+    // Asked for less, the system folds the left panel and opens it again, and the window visibly jumps.
+    // Floating panels keep 16 points clear of the viewer, one panel or two (measured).
+    var narrowestWindow: CGFloat {
+        let panels = openPanelsWidth
+        return panels + Self.viewerMinimum + (panels > 0 ? 16 : 0)
     }
 }
 
