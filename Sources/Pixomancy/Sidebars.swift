@@ -6,13 +6,21 @@ import SwiftUI
 // Small previews, decoded once and kept while the app runs.
 @MainActor
 enum ThumbnailCache {
-    private static let cache = NSCache<NSURL, CGImage>()
+    private static let cache: NSCache<NSURL, CGImage> = {
+        let cache = NSCache<NSURL, CGImage>()
+        cache.countLimit = 120
+        return cache
+    }()
+    private static var decoding: [URL: Task<CGImage?, Never>] = [:]
+    private static var shapes: [URL: CGFloat] = [:]
 
     static func image(for url: URL, side: CGFloat) async -> CGImage? {
         if let hit = cache.object(forKey: url as NSURL) { return hit }
+        // The list stands three times over; the same photo in each copy shares one decode.
+        if let running = decoding[url] { return await running.value }
         // One size for every place a thumbnail shows, so the cache never hands a tiny one to a big cell.
         let pixels = Int(220 * (NSScreen.main?.backingScaleFactor ?? 2) * 2)
-        let made = await Task.detached(priority: .utility) { () -> CGImage? in
+        let task = Task.detached(priority: .utility) { () -> CGImage? in
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -20,13 +28,35 @@ enum ThumbnailCache {
                 kCGImageSourceThumbnailMaxPixelSize: pixels,
             ]
             return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        }.value
+        }
+        decoding[url] = task
+        let made = await task.value
+        decoding[url] = nil
         if let made { cache.setObject(made, forKey: url as NSURL) }
         return made
     }
 
+    // Width over height, read from the file's header: a row keeps its height before its picture loads, and the loop stays exact.
+    static func shape(of url: URL) async -> CGFloat {
+        if let known = shapes[url] { return known }
+        let read = await Task.detached(priority: .utility) { () -> CGFloat in
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = props[kCGImagePropertyPixelWidth] as? CGFloat,
+                  let height = props[kCGImagePropertyPixelHeight] as? CGFloat, width > 0, height > 0 else { return 1.5 }
+            // Orientations 5 to 8 stand the picture on its side.
+            let sideways = (props[kCGImagePropertyOrientation] as? Int ?? 1) >= 5
+            return sideways ? height / width : width / height
+        }.value
+        shapes[url] = read
+        return read
+    }
+
     // A photo changed on disk (rotated, metadata removed).
-    static func forget(_ url: URL) { cache.removeObject(forKey: url as NSURL) }
+    static func forget(_ url: URL) {
+        cache.removeObject(forKey: url as NSURL)
+        shapes[url] = nil
+    }
 }
 
 struct Thumbnail: View {
@@ -34,6 +64,8 @@ struct Thumbnail: View {
     let side: CGFloat
     var revision = 0
     @State private var image: CGImage?
+    @State private var shape: CGFloat = 1.5
+    @State private var onScreen = false
 
     var body: some View {
         // Hugs the photo's shape, so landscape thumbnails don't leave empty bands in the list.
@@ -41,14 +73,19 @@ struct Thumbnail: View {
             if let image {
                 Image(decorative: image, scale: 1)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(shape, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             } else {
-                RoundedRectangle(cornerRadius: 4).fill(.quaternary).aspectRatio(1.5, contentMode: .fit)
+                RoundedRectangle(cornerRadius: 4).fill(.quaternary).aspectRatio(shape, contentMode: .fit)
             }
         }
         .frame(maxWidth: side, maxHeight: side)
-        .task(id: "\(revision) \(url.path)") { image = await ThumbnailCache.image(for: url, side: side) }
+        // Every row of the list exists all the time; only the ones on screen hold a picture.
+        .onScrollVisibilityChange(threshold: 0.01) { onScreen = $0 }
+        .task(id: "\(revision) \(url.path)") { shape = await ThumbnailCache.shape(of: url) }
+        .task(id: "\(onScreen) \(revision) \(url.path)") {
+            image = onScreen ? await ThumbnailCache.image(for: url, side: side) : nil
+        }
     }
 }
 
@@ -117,36 +154,34 @@ struct ThumbnailList: View {
     @ObservedObject var model: ViewerModel
     @AppStorage(ThumbnailStyle.key) private var style: ThumbnailStyle = .imagesAndNames
     @State private var collapsed: Set<URL> = []
-    // Stepping past either end: a second copy of the list stands next to the first while the panel rolls on into it.
-    @State private var extraCopy: ListCopy?
-    @State private var overflows = false
-    @State private var selectedCell = CGRect.zero
+    @State private var copyHeight: CGFloat = 0
     @State private var panelHeight: CGFloat = 0
-    @State private var wrapID = 0
+    @State private var target: LoopScroller.Target?
+    @State private var rowFrames = RowFrames()
 
-    private enum ListCopy: Hashable { case main, above, below }
-    private struct CellID: Hashable {
-        let url: URL
-        let copy: ListCopy
-    }
+    // A list taller than the panel becomes a loop: after the last photo comes the first again, with the arrows and the wheel alike.
+    private var looping: Bool { panelHeight > 0 && copyHeight > panelHeight }
+    private var spacing: CGFloat { style == .names ? 0 : 6 }
 
     var body: some View {
         // The + sits under the list, not over it; the list fades out just above it.
         VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: style == .names ? 0 : 6) {
-                        if extraCopy == .above { rows(.above) }
-                        rows(.main)
-                        if extraCopy == .below { rows(.below) }
+            Group {
+                ScrollView(.vertical, showsIndicators: !looping) {
+                    VStack(alignment: .leading, spacing: spacing) {
+                        copyOfRows(0)
+                        if looping {
+                            copyOfRows(1)
+                            copyOfRows(2)
+                        }
+                    }
+                    .coordinateSpace(.named(Self.listSpace))
+                    .background {
+                        LoopScroller(period: looping ? copyHeight + spacing : nil, target: target, rowFrames: rowFrames)
                     }
                     .padding(.leading, style == .names ? 8 : 14)
                     .padding(.trailing, style == .names ? 12 : 18)
                     .padding(.vertical, style == .names ? 8 : 10)
-                }
-                .coordinateSpace(.named(Self.panelSpace))
-                .onScrollGeometryChange(for: Bool.self) { $0.contentSize.height > $0.containerSize.height } action: { _, fits in
-                    if extraCopy == nil { overflows = fits }
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
                 // A folder dropped here joins the ones already open.
@@ -165,20 +200,13 @@ struct ThumbnailList: View {
                     } label: { EmptyView() }
                     .pickerStyle(.inline)
                 }
-                .onChange(of: model.currentURL, initial: true) { old, url in
+                .onChange(of: model.currentURL, initial: true) { _, url in
                     guard let url else { return }
                     // Arrows can walk into a folded group; open it so the shown photo is visible.
                     if let group = model.groups.first(where: { $0.files.contains(url) }), collapsed.contains(group.folder) {
                         collapsed.remove(group.folder)
                     }
-                    let wrap = model.takeStepWrap()
-                    wrapID += 1
-                    extraCopy = nil
-                    if wrap != 0, overflows, let old {
-                        roll(from: old, to: url, forward: wrap > 0, proxy)
-                    } else {
-                        withAnimation { proxy.scrollTo(CellID(url: url, copy: .main), anchor: .center) }
-                    }
+                    target = LoopScroller.Target(url: url, token: (target?.token ?? 0) + 1, instant: target == nil)
                 }
             }
             .mask {
@@ -205,79 +233,82 @@ struct ThumbnailList: View {
         .frame(minWidth: 200)
     }
 
-    private static let panelSpace = "thumbnailPanel"
-    private static let rollTime = 0.35
+    static let listSpace = "thumbnailList"
 
-    private func rows(_ copy: ListCopy) -> some View {
-        ForEach(model.groups) { group in
-            FolderHeader(folder: group.folder, isCollapsed: collapsed.contains(group.folder)) {
-                withAnimation(.snappy) {
-                    if collapsed.contains(group.folder) { collapsed.remove(group.folder) } else { collapsed.insert(group.folder) }
-                }
-            } remove: {
-                model.remove(group.folder)
+    private func copyOfRows(_ copy: Int) -> some View {
+        ThumbnailRows(model: model, groups: model.groups, collapsed: $collapsed, folded: collapsed, style: style, revision: model.revision, copy: copy, rowFrames: rowFrames)
+            .equatable()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                if copy == 0 { copyHeight = height }
             }
-            if !collapsed.contains(group.folder) {
-                if group.files.isEmpty {
-                    Text("No Photos")
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 6)
-                }
-                ForEach(group.files, id: \.self) { url in
-                    cell(url, copy: copy)
-                }
-            }
-        }
+            .accessibilityHidden(copy != 0)
+    }
+}
+
+// One copy of the list. Redrawn only when the list itself changes: the model publishes on every step, and with hundreds of
+// rows in three copies that was felt on each arrow key.
+private struct ThumbnailRows: View, Equatable {
+    let model: ViewerModel
+    let groups: [FolderGroup]
+    @Binding var collapsed: Set<URL>
+    let folded: Set<URL>
+    let style: ThumbnailStyle
+    let revision: Int
+    let copy: Int
+    let rowFrames: RowFrames
+
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.groups == b.groups && a.folded == b.folded && a.style == b.style && a.revision == b.revision && a.copy == b.copy
     }
 
-    // The last photo is followed by the first, without a jump back across the list: the panel rolls on into a copy,
-    // and once it stops the copy goes and the same photo stands in the same place in the real list.
-    private func roll(from old: URL, to url: URL, forward: Bool, _ proxy: ScrollViewProxy) {
-        let id = wrapID
-        let copy: ListCopy = forward ? .below : .above
-        let anchor: UnitPoint = forward ? .top : .bottom
-        // A copy added above pushes everything down; pin the shown photo where it was first, unanimated.
-        let spare = panelHeight - selectedCell.height
-        let pin = UnitPoint(x: 0.5, y: spare > 0 ? selectedCell.minY / spare : 0)
-        extraCopy = copy
-        DispatchQueue.main.async {
-            guard id == wrapID else { return }
-            if !forward { proxy.scrollTo(CellID(url: old, copy: .main), anchor: pin) }
-            // The lazy list needs a moment to lay the new copy out, or the animation below has nowhere to go.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                guard id == wrapID else { return }
-                withAnimation(.easeInOut(duration: Self.rollTime)) {
-                    proxy.scrollTo(CellID(url: url, copy: copy), anchor: anchor)
+    var body: some View {
+        VStack(alignment: .leading, spacing: style == .names ? 0 : 6) {
+            ForEach(groups) { group in
+                FolderHeader(folder: group.folder, isCollapsed: folded.contains(group.folder)) {
+                    withAnimation(.snappy) {
+                        if collapsed.contains(group.folder) { collapsed.remove(group.folder) } else { collapsed.insert(group.folder) }
+                    }
+                } remove: {
+                    model.remove(group.folder)
                 }
-                // By the clock: a scroll's animation reports itself finished at once.
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.rollTime + 0.05) {
-                    guard id == wrapID else { return }
-                    // Below: back to the real row while the copy still holds the list long, so nothing clamps.
-                    // Above: the copy has the real list's offsets, so it can simply go.
-                    if forward { proxy.scrollTo(CellID(url: url, copy: .main), anchor: anchor) }
-                    DispatchQueue.main.async {
-                        guard id == wrapID else { return }
-                        extraCopy = nil
+                if !folded.contains(group.folder) {
+                    if group.files.isEmpty {
+                        Text("No Photos")
+                            .font(.callout)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 6)
+                    }
+                    ForEach(group.files, id: \.self) { url in
+                        ThumbnailCell(model: model, url: url, style: style, revision: revision, copy: copy, rowFrames: rowFrames)
                     }
                 }
             }
         }
     }
+}
 
-    // Drawn by hand: the system list's selection is inset and came out narrower than the panel.
-    private func cell(_ url: URL, copy: ListCopy) -> some View {
-        let selected = url == model.currentURL
+// Drawn by hand: the system list's selection is inset and came out narrower than the panel.
+private struct ThumbnailCell: View {
+    let model: ViewerModel
+    let url: URL
+    let style: ThumbnailStyle
+    let revision: Int
+    let copy: Int
+    let rowFrames: RowFrames
+    // Follows the model row by row, so a new current photo redraws the two rows it touches and no other.
+    @State private var selected = false
+
+    var body: some View {
         let name = Text(url.lastPathComponent)
             .foregroundStyle(selected ? .primary : .secondary)
             .lineLimit(1)
             .truncationMode(.middle)
-        return Group {
+        Group {
             switch style {
             case .names:
                 HStack(spacing: 8) {
-                    Thumbnail(url: url, side: 20, revision: model.revision).frame(width: 20, height: 20)
+                    Thumbnail(url: url, side: 20, revision: revision).frame(width: 20, height: 20)
                     name.font(.callout)
                     Spacer(minLength: 0)
                 }
@@ -285,7 +316,7 @@ struct ThumbnailList: View {
                 .padding(.horizontal, 8)
             case .images, .imagesAndNames:
                 VStack(spacing: 6) {
-                    Thumbnail(url: url, side: 220, revision: model.revision)
+                    Thumbnail(url: url, side: 220, revision: revision)
                     if style == .imagesAndNames { name.font(.caption) }
                 }
                 .padding(.vertical, style == .images ? 10 : 12)
@@ -306,10 +337,113 @@ struct ThumbnailList: View {
                 return controller.thumbnailMenu()
             }
         }
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.panelSpace)) } action: { frame in
-            if selected, copy == .main { selectedCell = frame }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ThumbnailList.listSpace)) } action: { frame in
+            if copy == 0 { rowFrames.frames[url] = frame }
         }
-        .id(CellID(url: url, copy: copy))
+        .onReceive(model.$currentURL.map { [url] in $0 == url }.removeDuplicates()) { selected = $0 }
+    }
+}
+
+// Where each photo's row stands in the first copy of the list. Read when scrolling, so it needn't redraw anything.
+final class RowFrames {
+    var frames: [URL: CGRect] = [:]
+}
+
+// Drives the panel's scrolling, as the Layouts list in Keylapse does. The shown photo goes to the middle by the shortest way,
+// past the last photo into the first if that is nearer. Once there, or while the wheel turns, the position quietly moves a
+// whole copy up or down, which looks exactly the same, so there is always a copy's worth of rows on either side.
+private struct LoopScroller: NSViewRepresentable {
+    struct Target: Equatable {
+        let url: URL
+        let token: Int
+        let instant: Bool
+    }
+
+    var period: CGFloat?
+    var target: Target?
+    let rowFrames: RowFrames
+
+    func makeNSView(context: Context) -> Scroller {
+        let view = Scroller()
+        view.rowFrames = rowFrames
+        return view
+    }
+
+    func updateNSView(_ view: Scroller, context: Context) {
+        view.period = period
+        if let target, target != view.applied { view.pending = target }
+        // SwiftUI may still be laying the new rows out.
+        DispatchQueue.main.async { view.applyIfPossible() }
+    }
+
+    final class Scroller: NSView {
+        var period: CGFloat?
+        var pending: Target?
+        var applied: Target?
+        var rowFrames: RowFrames?
+        private var animating = false
+        private var observation: NSObjectProtocol?
+
+        // Measured from the top, as the rows' frames are.
+        override var isFlipped: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let clip = enclosingScrollView?.contentView else { return }
+            clip.postsBoundsChangedNotifications = true
+            observation = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self, weak clip] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let clip, !self.animating else { return }
+                    let y = self.normalised(clip.bounds.origin.y)
+                    if y != clip.bounds.origin.y { clip.setBoundsOrigin(NSPoint(x: 0, y: y)) }
+                }
+            }
+        }
+
+        override func layout() {
+            super.layout()
+            applyIfPossible()
+        }
+
+        private func normalised(_ y: CGFloat) -> CGFloat {
+            guard let period, period > 0 else { return y }
+            var y = y
+            while y < period * 0.5 { y += period }
+            while y >= period * 1.5 { y -= period }
+            return y
+        }
+
+        func applyIfPossible() {
+            guard !animating, let target = pending, let period, let clip = enclosingScrollView?.contentView,
+                  let frame = rowFrames?.frames[target.url], (clip.documentView?.frame.height ?? 0) >= period * 2.5 else { return }
+            applied = target
+            pending = nil
+            let current = clip.bounds.origin.y
+            let inset = convert(NSPoint.zero, to: clip.documentView).y
+            let centre = frame.midY + inset - clip.bounds.height / 2
+            // Nearest of the three copies of the row, so the last photo rolls on into the first.
+            let destination = (0..<3).map { centre + CGFloat($0) * period }.min { abs($0 - current) < abs($1 - current) } ?? current
+            if target.instant || abs(destination - current) < 0.5 {
+                clip.setBoundsOrigin(NSPoint(x: 0, y: normalised(destination)))
+                return
+            }
+            animating = true
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                clip.animator().setBoundsOrigin(NSPoint(x: 0, y: destination))
+            }, completionHandler: { [weak self, weak clip] in
+                MainActor.assumeIsolated {
+                    guard let self, let clip else { return }
+                    self.animating = false
+                    let y = self.normalised(clip.bounds.origin.y)
+                    if y != clip.bounds.origin.y { clip.setBoundsOrigin(NSPoint(x: 0, y: y)) }
+                    self.applyIfPossible()
+                }
+            })
+        }
+
+        deinit { if let observation { NotificationCenter.default.removeObserver(observation) } }
     }
 }
 
