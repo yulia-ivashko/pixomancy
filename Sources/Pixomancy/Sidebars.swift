@@ -370,8 +370,12 @@ private struct LoopScroller: NSViewRepresentable {
     }
 
     func updateNSView(_ view: Scroller, context: Context) {
+        // Rows take their real heights only as the photos' shapes are read; until the first move the shown photo stays centred through that.
+        if view.settling, let period, let old = view.period, abs(period - old) > 0.5, view.pending == nil, let applied = view.applied {
+            view.pending = Target(url: applied.url, token: applied.token, instant: true)
+        }
         view.period = period
-        if let target, target != view.applied { view.pending = target }
+        if let target, target != view.applied, target.token != view.applied?.token { view.pending = target }
         // SwiftUI may still be laying the new rows out.
         DispatchQueue.main.async { view.applyIfPossible() }
     }
@@ -381,6 +385,9 @@ private struct LoopScroller: NSViewRepresentable {
         var pending: Target?
         var applied: Target?
         var rowFrames: RowFrames?
+        var settling = true
+        private var moving = false
+        private var placedAt: CGFloat?
         private var animating = false
         private var observation: NSObjectProtocol?
 
@@ -393,11 +400,21 @@ private struct LoopScroller: NSViewRepresentable {
             clip.postsBoundsChangedNotifications = true
             observation = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self, weak clip] _ in
                 MainActor.assumeIsolated {
-                    guard let self, let clip, !self.animating else { return }
+                    guard let self, let clip, !self.animating, !self.moving else { return }
+                    // Moved, and not by this view: the wheel. From here on the list stays where the person put it.
+                    // Layout posts this too, without moving anything.
+                    if let placedAt = self.placedAt, abs(clip.bounds.origin.y - placedAt) > 0.5 { self.settling = false }
                     let y = self.normalised(clip.bounds.origin.y)
-                    if y != clip.bounds.origin.y { clip.setBoundsOrigin(NSPoint(x: 0, y: y)) }
+                    if y != clip.bounds.origin.y { self.place(clip, y) }
                 }
             }
+        }
+
+        private func place(_ clip: NSClipView, _ y: CGFloat) {
+            moving = true
+            placedAt = y
+            clip.setBoundsOrigin(NSPoint(x: 0, y: y))
+            moving = false
         }
 
         override func layout() {
@@ -424,9 +441,19 @@ private struct LoopScroller: NSViewRepresentable {
             // Nearest of the three copies of the row, so the last photo rolls on into the first.
             let destination = (0..<3).map { centre + CGFloat($0) * period }.min { abs($0 - current) < abs($1 - current) } ?? current
             if target.instant || abs(destination - current) < 0.5 {
-                clip.setBoundsOrigin(NSPoint(x: 0, y: normalised(destination)))
+                let moved = abs(normalised(destination) - current) > 0.5
+                place(clip, normalised(destination))
+                // A row's frame can arrive after the list's height: look again until the photo stops moving.
+                if settling, moved {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                        guard let self, self.settling, self.pending == nil, self.applied == target else { return }
+                        self.pending = target
+                        self.applyIfPossible()
+                    }
+                }
                 return
             }
+            settling = false
             animating = true
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.3
@@ -437,7 +464,7 @@ private struct LoopScroller: NSViewRepresentable {
                     guard let self, let clip else { return }
                     self.animating = false
                     let y = self.normalised(clip.bounds.origin.y)
-                    if y != clip.bounds.origin.y { clip.setBoundsOrigin(NSPoint(x: 0, y: y)) }
+                    if y != clip.bounds.origin.y { self.place(clip, y) }
                     self.applyIfPossible()
                 }
             })
