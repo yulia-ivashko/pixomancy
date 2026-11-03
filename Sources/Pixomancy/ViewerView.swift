@@ -84,8 +84,6 @@ struct ControlBar: View {
                     }
                     BarDivider()
                     BarButton(symbol: "plus.magnifyingglass", help: "Zoom In (⌘+)") { zoom.zoom(by: 1.25) }
-                    BarDivider()
-                    BarButton(symbol: "arrow.up.left.and.arrow.down.right", help: "Fit to Screen (⌘8)") { model.fitWindowToScreen() }
                 }
                 .disabled(!hasImage)
 
